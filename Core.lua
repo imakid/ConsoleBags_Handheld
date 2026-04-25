@@ -474,13 +474,14 @@ end
 
 --#region 装备等级显示在图标上
 
--- 装等显示配置
+-- 装等显示配置 - 默认开启图标显示，隐藏原始列
 CBHandheld.ItemLevelConfig = {
     Enabled = true,           -- 是否启用
     ShowOnIcon = true,        -- 显示在图标上(而非单独列)
     FontSize = 12,            -- 字体大小
     Position = "BOTTOMRIGHT", -- 位置
     ColorByQuality = true,    -- 根据品质着色
+    HideOriginalColumn = true,-- 完全隐藏原始装等列
 }
 
 -- 创建装等文本框
@@ -581,12 +582,58 @@ function CBHandheld:InitItemLevelOnIcon()
         -- 如果启用了图标显示，隐藏原始装等列
         if config.ShowOnIcon and frame.ilvlContainer then
             frame.ilvlContainer:Hide()
+            frame.ilvlContainer:SetWidth(0.001)  -- 宽度设为几乎为0，不占用布局空间
         elseif frame.ilvlContainer then
             frame.ilvlContainer:Show()
         end
     end
     
     self:Print("|cff00ff00装备等级图标显示已启用")
+    
+    -- 更进一步：在创建新ItemFrame时就隐藏装等列
+    if self.ItemLevelConfig.HideOriginalColumn then
+        self:HideOriginalIlvlColumn()
+    end
+end
+
+-- 完全隐藏原始装等列（在创建阶段）
+function CBHandheld:HideOriginalIlvlColumn()
+    local cb = LibStub("AceAddon-3.0"):GetAddon("ConsoleBags", true)
+    if not cb then return end
+    
+    local itemFrame = cb:GetModule("ItemFrame")
+    if not itemFrame or not itemFrame.proto then return end
+    
+    -- Hook _DoCreate函数，在创建时就隐藏装等列
+    local originalDoCreate = itemFrame._DoCreate
+    
+    itemFrame._DoCreate = function(...)
+        local item = originalDoCreate(...)
+        
+        -- 延迟执行，确保frame已创建
+        C_Timer.After(0, function()
+            if item and item.widget and item.widget.ilvlContainer then
+                item.widget.ilvlContainer:Hide()
+                item.widget.ilvlContainer:SetWidth(0.001)
+                -- 也隐藏装等文本
+                if item.widget.ilvl then
+                    item.widget.ilvl:Hide()
+                end
+            end
+        end)
+        
+        return item
+    end
+    
+    -- 处理已经创建的items
+    if itemFrame._pool then
+        for _, item in itemFrame._pool:EnumerateActive() do
+            if item.widget and item.widget.ilvlContainer then
+                item.widget.ilvlContainer:Hide()
+                item.widget.ilvlContainer:SetWidth(0.001)
+            end
+        end
+    end
 end
 
 -- 切换装等显示模式
