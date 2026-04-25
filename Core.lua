@@ -472,3 +472,153 @@ function CBHandheld:ChatCommand(input)
     end
 end
 
+--#region 装备等级显示在图标上
+
+-- 装等显示配置
+CBHandheld.ItemLevelConfig = {
+    Enabled = true,           -- 是否启用
+    ShowOnIcon = true,        -- 显示在图标上(而非单独列)
+    FontSize = 12,            -- 字体大小
+    Position = "BOTTOMRIGHT", -- 位置
+    ColorByQuality = true,    -- 根据品质着色
+}
+
+-- 创建装等文本框
+function CBHandheld:CreateItemLevelText(parent)
+    local itemLevelFrame = CreateFrame('Frame', nil, parent)
+    itemLevelFrame:SetSize(30, 14)
+    itemLevelFrame:SetFrameLevel(parent:GetFrameLevel() + 5)
+    
+    -- 背景遮罩（提高可读性）
+    local bg = itemLevelFrame:CreateTexture(nil, 'BACKGROUND')
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.6)
+    itemLevelFrame.bg = bg
+    
+    -- 文本
+    local text = itemLevelFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormalTiny')
+    text:SetAllPoints()
+    text:SetJustifyH('CENTER')
+    text:SetJustifyV('MIDDLE')
+    text:SetFont('Fonts\\FRIZQT__.TTF', self.ItemLevelConfig.FontSize, 'OUTLINE')
+    itemLevelFrame.text = text
+    
+    itemLevelFrame:Hide()
+    return itemLevelFrame
+end
+
+-- 初始化装等显示Hook
+function CBHandheld:InitItemLevelOnIcon()
+    if not self.ItemLevelConfig.Enabled then return end
+    
+    local cb = LibStub("AceAddon-3.0"):GetAddon("ConsoleBags", true)
+    if not cb then return end
+    
+    local itemFrame = cb:GetModule("ItemFrame")
+    if not itemFrame or not itemFrame.proto then return end
+    
+    -- 保存原始的Build函数引用
+    local originalBuild = itemFrame.proto.Build
+    local selfRef = self
+    
+    -- Hook Build函数
+    itemFrame.proto.Build = function(itemFrameSelf, item, offset, parent)
+        -- 调用原始函数
+        originalBuild(itemFrameSelf, item, offset, parent)
+        
+        if not selfRef.ItemLevelConfig.Enabled then return end
+        local config = selfRef.ItemLevelConfig
+        
+        local frame = itemFrameSelf.widget
+        
+        -- 创建或获取装等框
+        if not frame.icon.itemLevel then
+            frame.icon.itemLevel = selfRef:CreateItemLevelText(frame.icon)
+        end
+        
+        local itemLevelFrame = frame.icon.itemLevel
+        
+        -- 检查是否是需要显示装等的物品类型
+        local shouldShow = item.ilvl and item.ilvl > 0 and (
+            item.type == Enum.ItemClass.Armor or 
+            item.type == Enum.ItemClass.Weapon or
+            item.category == Enum.ItemClass.Battlepet
+        )
+        
+        if shouldShow then
+            -- 设置位置
+            itemLevelFrame:ClearAllPoints()
+            local pos = config.Position
+            if pos == "BOTTOMRIGHT" then
+                itemLevelFrame:SetPoint('BOTTOMRIGHT', frame.icon, 'BOTTOMRIGHT', -1, 2)
+            elseif pos == "BOTTOMLEFT" then
+                itemLevelFrame:SetPoint('BOTTOMLEFT', frame.icon, 'BOTTOMLEFT', 1, 2)
+            elseif pos == "TOPRIGHT" then
+                itemLevelFrame:SetPoint('TOPRIGHT', frame.icon, 'TOPRIGHT', -1, -2)
+            elseif pos == "TOPLEFT" then
+                itemLevelFrame:SetPoint('TOPLEFT', frame.icon, 'TOPLEFT', 1, -2)
+            end
+            
+            -- 设置文本
+            itemLevelFrame.text:SetText(item.ilvl)
+            
+            -- 根据品质着色
+            if config.ColorByQuality and C_Item and C_Item.GetItemQualityColor then
+                local r, g, b = C_Item.GetItemQualityColor(item.quality or 0)
+                itemLevelFrame.text:SetTextColor(r, g, b)
+            else
+                itemLevelFrame.text:SetTextColor(1, 1, 1)
+            end
+            
+            -- 更新字体大小
+            itemLevelFrame.text:SetFont('Fonts\\FRIZQT__.TTF', config.FontSize, 'OUTLINE')
+            
+            itemLevelFrame:Show()
+        else
+            itemLevelFrame:Hide()
+        end
+        
+        -- 如果启用了图标显示，隐藏原始装等列
+        if config.ShowOnIcon and frame.ilvlContainer then
+            frame.ilvlContainer:Hide()
+        elseif frame.ilvlContainer then
+            frame.ilvlContainer:Show()
+        end
+    end
+    
+    self:Print("|cff00ff00装备等级图标显示已启用")
+end
+
+-- 切换装等显示模式
+function CBHandheld:ToggleItemLevelDisplay()
+    self.ItemLevelConfig.ShowOnIcon = not self.ItemLevelConfig.ShowOnIcon
+    
+    if self.ItemLevelConfig.ShowOnIcon then
+        self:Print("|cff00ff00装等显示: 图标模式")
+    else
+        self:Print("|cff00ff00装等显示: 列模式")
+    end
+    
+    -- 刷新背包界面
+    local cb = LibStub("AceAddon-3.0"):GetAddon("ConsoleBags", true)
+    if cb then
+        local view = cb:GetModule("InventoryView")
+        if view and view.Refresh then
+            view:Refresh()
+        end
+    end
+end
+
+--#endregion
+
+-- 在模块启用时初始化装等显示
+local originalOnEnable = CBHandheld.OnEnable
+CBHandheld.OnEnable = function(self)
+    originalOnEnable(self)
+    
+    -- 延迟初始化装等显示
+    C_Timer.After(2, function()
+        self:InitItemLevelOnIcon()
+    end)
+end
+
