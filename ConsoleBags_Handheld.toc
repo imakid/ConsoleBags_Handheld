@@ -1,0 +1,11 @@
+## Interface: 110007
+## Title: ConsoleBags Handheld Mode
+## Notes: ROG Ally X掌机优化伴侣插件 - 为ConsoleBags提供可配置的大尺寸UI
+## Author: Assistant
+## Version: 1.0.1
+## Dependencies: ConsoleBags
+## SavedVariables: CBHandheldDB
+## IconTexture: Interface\\Icons\\inv_misc_enggizmos_19
+
+# Ace3 Libraries (ConsoleBags should already have these, but listing for clarity)
+Core.lua
